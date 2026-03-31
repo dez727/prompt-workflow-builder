@@ -1,4 +1,4 @@
-export default function Header({ onSettings, onSaved, onHome, savedCount, view }) {
+export default function Header({ onSettings, onSaved, onHome, onLogout, savedCount, view, authEnabled, currentUser }) {
   return (
     <header className="site-header">
       <div className="header-inner">
@@ -8,6 +8,18 @@ export default function Header({ onSettings, onSaved, onHome, savedCount, view }
         </button>
 
         <div className="header-actions">
+          {authEnabled && (
+            <>
+              {currentUser?.email && (
+                <span className="header-user">{currentUser.email}</span>
+              )}
+
+              <button className="btn btn-ghost btn-sm" onClick={onLogout}>
+                Sign Out
+              </button>
+            </>
+          )}
+
           <button
             className={`icon-btn ${view === 'saved' ? 'active' : ''}`}
             onClick={onSaved}

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Header from './components/Header.jsx'
 import StepIndicator from './components/StepIndicator.jsx'
 import BusinessTypeStep from './components/BusinessTypeStep.jsx'
@@ -8,6 +8,121 @@ import SettingsModal from './components/SettingsModal.jsx'
 import SavedWorkflows from './components/SavedWorkflows.jsx'
 import { loadSettings, saveSettings, loadWorkflows, saveWorkflow, deleteWorkflow } from './lib/storage.js'
 import { generateWorkflow } from './lib/aiProviders.js'
+
+function AccessGate({ clientId, onAuthenticated }) {
+  const [error, setError] = useState('')
+  const [scriptReady, setScriptReady] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (!clientId) {
+      setError('Google sign-in is not configured on this deployment.')
+      return
+    }
+
+    let cancelled = false
+    let script = document.querySelector('script[data-google-identity="true"]')
+
+    const onLoad = () => {
+      if (cancelled || !window.google?.accounts?.id) return
+      setScriptReady(true)
+    }
+
+    if (!script) {
+      script = document.createElement('script')
+      script.src = 'https://accounts.google.com/gsi/client'
+      script.async = true
+      script.defer = true
+      script.dataset.googleIdentity = 'true'
+      script.addEventListener('load', onLoad)
+      script.addEventListener('error', () => {
+        if (!cancelled) setError('Could not load Google sign-in. Please refresh and try again.')
+      })
+      document.head.appendChild(script)
+    } else if (window.google?.accounts?.id) {
+      setScriptReady(true)
+    } else {
+      script.addEventListener('load', onLoad)
+    }
+
+    return () => {
+      cancelled = true
+      script?.removeEventListener?.('load', onLoad)
+    }
+  }, [clientId])
+
+  useEffect(() => {
+    if (!scriptReady || !clientId || !window.google?.accounts?.id) return
+
+    const target = document.getElementById('google-signin-button')
+    if (!target) return
+
+    target.innerHTML = ''
+    window.google.accounts.id.initialize({
+      client_id: clientId,
+      callback: async (response) => {
+        setSubmitting(true)
+        setError('')
+
+        try {
+          const res = await fetch('/api/auth/google', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ credential: response.credential }),
+          })
+          const data = await res.json().catch(() => ({}))
+
+          if (!res.ok) {
+            setError(data.error ?? 'Google sign-in failed.')
+            return
+          }
+
+          onAuthenticated(data.user ?? null)
+        } catch {
+          setError('Could not reach the server. Please try again.')
+        } finally {
+          setSubmitting(false)
+        }
+      },
+      auto_select: false,
+      ux_mode: 'popup',
+    })
+
+    window.google.accounts.id.renderButton(target, {
+      type: 'standard',
+      theme: 'outline',
+      size: 'large',
+      shape: 'pill',
+      text: 'signin_with',
+      width: 320,
+    })
+  }, [clientId, onAuthenticated, scriptReady])
+
+  return (
+    <main className="access-gate-shell">
+      <section className="access-gate-card">
+        <div className="home-eyebrow" style={{ marginBottom: 14 }}>
+          <div className="home-eyebrow-line" />
+          <span className="label-caps">Protected Access</span>
+        </div>
+
+        <h1 className="display-md" style={{ marginTop: 0, marginBottom: 10 }}>
+          Sign in to use Workflow Builder
+        </h1>
+        <p className="access-gate-copy">
+          Sign in with Google to access this deployment while the full multi-user security model is being built out.
+        </p>
+
+        <div className="access-gate-form">
+          {error && <div className="access-gate-error">{error}</div>}
+
+          <div id="google-signin-button" className={`google-signin-slot ${submitting ? 'disabled' : ''}`} />
+          {!scriptReady && !error && <div className="access-gate-status">Loading Google sign-in…</div>}
+        </div>
+      </section>
+    </main>
+  )
+}
 
 /* ─── Home Page ──────────────────────────────────────────────────────────────── */
 function HomePage({ onStart, onSaved, savedCount }) {
@@ -53,7 +168,7 @@ function HomePage({ onStart, onSaved, savedCount }) {
           { num: '01', title: 'Choose Your Context', desc: 'Select your business type and the goal you want to automate.' },
           { num: '02', title: 'AI Generates the Plan', desc: 'Get a complete workflow with tools, prompts, and implementation steps.' },
           { num: '03', title: 'Save & Implement', desc: 'Save workflows per client, copy prompts, and export to JSON.' },
-          { num: '04', title: 'Your AI, Your Way', desc: 'Use Claude API or any local Ollama model — no lock-in.' },
+          { num: '04', title: 'Your AI, Your Way', desc: 'Use Claude, OpenAI, Gemini, OpenRouter, or any local Ollama model.' },
         ].map((f) => (
           <div key={f.num}>
             <div className="home-feature-num">{f.num}</div>
@@ -72,7 +187,7 @@ function ConfigWarning({ onOpenSettings }) {
     <div className="config-prompt">
       <div className="config-prompt-text">
         <strong>No AI provider configured</strong>
-        Connect Claude API or a local Ollama model to generate workflows.
+        Connect Claude, OpenAI, Gemini, OpenRouter, or a local Ollama model to generate workflows.
       </div>
       <button className="btn btn-ghost btn-sm" onClick={onOpenSettings}>
         Open Settings
@@ -97,12 +212,49 @@ export default function App() {
   const [showSettings, setShowSettings]     = useState(false)
   const [settings, setSettings]             = useState(loadSettings)
   const [savedWorkflows, setSavedWorkflows] = useState(loadWorkflows)
+  const [authState, setAuthState]           = useState({ loading: true, enabled: false, authenticated: false, clientId: null, user: null })
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadSession() {
+      try {
+        const res = await fetch('/api/auth/session')
+        const data = await res.json()
+        if (!cancelled) {
+          setAuthState({
+            loading: false,
+            enabled: Boolean(data.enabled),
+            authenticated: Boolean(data.authenticated),
+            clientId: data.googleClientId ?? null,
+            user: data.user ?? null,
+          })
+        }
+      } catch {
+        if (!cancelled) {
+          setAuthState({ loading: false, enabled: false, authenticated: true, clientId: null, user: null })
+        }
+      }
+    }
+
+    loadSession()
+    return () => { cancelled = true }
+  }, [])
 
   /* handlers */
   const handleSettingsSave = (s) => {
     saveSettings(s)
     setSettings(s)
     setShowSettings(false)
+  }
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+    } finally {
+      setAuthState((state) => ({ ...state, authenticated: false, user: null }))
+      setShowSettings(false)
+    }
   }
 
   const handleGenerate = async () => {
@@ -151,9 +303,34 @@ export default function App() {
 
   const isConfigured = settings.provider === 'claude'
     ? !!settings.claudeApiKey
+    : settings.provider === 'openai'
+      ? !!settings.openaiApiKey
+      : settings.provider === 'gemini'
+        ? !!settings.geminiApiKey
+        : settings.provider === 'openrouter'
+          ? !!settings.openrouterApiKey && !!settings.openrouterModel
     : settings.provider === 'ollama'
       ? !!settings.ollamaModel
       : false
+
+  if (authState.loading) {
+    return (
+      <main className="access-gate-shell">
+        <section className="access-gate-card">
+          <div className="loading-status">Checking access…</div>
+        </section>
+      </main>
+    )
+  }
+
+  if (authState.enabled && !authState.authenticated) {
+    return (
+      <AccessGate
+        clientId={authState.clientId}
+        onAuthenticated={(user) => setAuthState((state) => ({ ...state, loading: false, authenticated: true, user }))}
+      />
+    )
+  }
 
   return (
     <div className="app-shell">
@@ -161,8 +338,11 @@ export default function App() {
         onSettings={() => setShowSettings(true)}
         onSaved={() => setView((v) => (v === 'saved' ? 'builder' : 'saved'))}
         onHome={() => setView('home')}
+        onLogout={handleLogout}
         savedCount={savedWorkflows.length}
         view={view}
+        authEnabled={authState.enabled}
+        currentUser={authState.user}
       />
 
       <main className="app-main">

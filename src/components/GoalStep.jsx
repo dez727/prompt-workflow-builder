@@ -82,7 +82,7 @@ export default function GoalStep({ businessType, selected, onSelect, onNext, onB
                 onChange={(e) => setCustomGoal(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleCustomSubmit()}
                 autoFocus
-                style={{ fontFamily: 'Lato, sans-serif' }}
+                style={{ fontFamily: 'DM Sans, sans-serif' }}
               />
               <button className="btn btn-accent btn-sm" onClick={handleCustomSubmit}>
                 Use

@@ -6,11 +6,7 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/ollama': {
-        target: 'http://localhost:11434',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/ollama/, ''),
-      },
+      '/api': 'http://localhost:3001',
     },
   },
 })

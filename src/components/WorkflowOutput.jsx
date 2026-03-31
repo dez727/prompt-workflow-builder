@@ -32,7 +32,7 @@ function ErrorState({ error, onRetry, onReset }) {
   return (
     <div className="error-container">
       <div className="error-code">!</div>
-      <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 20, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 16 }}>
+      <div style={{ fontFamily: 'DM Sans, sans-serif', fontSize: 16, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 16 }}>
         Generation Failed
       </div>
       <div className="error-msg">{error}</div>
@@ -264,6 +264,9 @@ export default function WorkflowOutput({
             <span className="meta-pill pill-time">⏱ {workflow.estimatedSetupTime} setup</span>
           )}
         </div>
+        <p style={{ color: 'var(--ink-muted)', lineHeight: 1.6, marginTop: 16, maxWidth: 760 }}>
+          Review the generated workflow, prompts, and tool suggestions before using them with real clients, internal systems, or sensitive data.
+        </p>
       </div>
 
       {/* Tabs */}

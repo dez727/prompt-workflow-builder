@@ -15,7 +15,7 @@ export default function SavedWorkflows({ workflows, onLoad, onDelete }) {
           <h2 className="display-md" style={{ margin: 0 }}>Your workflow library</h2>
         </div>
         {workflows.length > 0 && (
-          <span style={{ color: 'var(--ink-faint)', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 13, letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
+          <span style={{ color: 'var(--ink-faint)', fontFamily: 'DM Sans, sans-serif', fontSize: 13, letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
             {workflows.length} saved
           </span>
         )}
